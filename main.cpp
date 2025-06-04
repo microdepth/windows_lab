@@ -6,7 +6,6 @@
 #include <winuser.h>
 #include <d2d1.h>
 #include <assert.h>
-#include <atlbase.h>
 #include "basewin.h"
 #pragma comment(lib, "d2d1.lib")
 
