@@ -1,0 +1,3 @@
+C:/Users/psdab/CLionProjects/windows_lab/cmake-build-debug/CMakeFiles/windows_lab.dir
+C:/Users/psdab/CLionProjects/windows_lab/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/psdab/CLionProjects/windows_lab/cmake-build-debug/CMakeFiles/rebuild_cache.dir
