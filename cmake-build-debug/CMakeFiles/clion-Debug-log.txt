@@ -1,4 +1,13 @@
 "C:\Program Files\JetBrains\CLion 2025.1.1\bin\cmake\win\x64\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_MAKE_PROGRAM=C:/Program Files/JetBrains/CLion 2025.1.1/bin/ninja/win/x64/ninja.exe" -G Ninja -S C:\Users\psdab\CLionProjects\windows_lab -B C:\Users\psdab\CLionProjects\windows_lab\cmake-build-debug
 -- Configuring done (0.2s)
--- Generating done (0.1s)
--- Build files have been written to: C:/Users/psdab/CLionProjects/windows_lab/cmake-build-debug
+CMake Error at CMakeLists.txt:8 (add_executable):
+  Cannot find source file:
+
+    atlbase.h
+
+
+CMake Error at CMakeLists.txt:8 (add_executable):
+  No SOURCES given to target: windows_lab
+
+
+CMake Generate step failed.  Build files cannot be regenerated correctly.
