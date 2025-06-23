@@ -23,7 +23,7 @@ protected:
     virtual void    RenderScene() = 0;
 
     HRESULT CreateGraphicsResources(HWND hwnd) {
-        hr = S_OK;
+        HRESULT hr = S_OK;
         if (m_pRenderTarget == nullptr) {
             RECT rc;
             GetClientRect(hwnd, &rc);
@@ -67,7 +67,7 @@ public:
         return hr;
     }
 
-    void Render() {
+    void Render(HWND hwnd) {
         HRESULT hr = CreateGraphicsResources(hwnd);
 
         assert(m_pRenderTarget);
