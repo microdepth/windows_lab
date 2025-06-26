@@ -21,7 +21,7 @@ class Scene : public GraphicsScene {
     D2D_POINT_2F m_Ticks[24];
 
     HRESULT CreateDeviceIndependentResources() { return S_OK; }
-    void    DiscardDeviceIndependentResources() { }
+    void    DiscardDeviceIndependentResources() {}
     HRESULT CreateDeviceDependentResources();
     void    DiscardDeviceDependentResources();
     void    CalculateLayout();
@@ -29,10 +29,9 @@ class Scene : public GraphicsScene {
 
     void    DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth);
 };
-
 HRESULT Scene::CreateDeviceDependentResources() {
     HRESULT hr = m_pRenderTarget->CreateSolidColorBrush(
-        D2D1::ColorF(1.0f, 1.0f, 0),
+        D2D1::ColorF(0.6f, 1.0f, 0.6f),
         D2D1::BrushProperties(),
         &m_pFill
         );
@@ -59,6 +58,62 @@ void Scene::DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth) {
     m_pRenderTarget->DrawLine(
         m_ellipse.point, endPoint, m_pStroke, fStrokeWidth);
 }
+void Scene::RenderScene() {
+    m_pRenderTarget->Clear(D2D1::ColorF(0.2f, 0, 0.2f));
+
+    m_pRenderTarget->FillEllipse(m_ellipse, m_pFill);
+    m_pRenderTarget->DrawEllipse(m_ellipse, m_pStroke);
+
+    for (DWORD i = 0; i < 12; i++) {
+        m_pRenderTarget->DrawLine(m_Ticks[i*2], m_Ticks[i*2+1], m_pStroke, 2.0f);
+    }
+
+    SYSTEMTIME time;
+    GetLocalTime(&time);
+
+    const float fHourAngle = ((360.0f / 12) * time.wHour) + (((360.0f / 12) / 60) * time.wMinute) + ((((360.0f / 12) / 60) / 60) * time.wSecond) + (((((360.0f / 12) / 60) / 60) / 1000) * time.wMilliseconds);
+    const float fMinuteAngle = ((360.0f / 60) * time.wMinute) + (((360.0f / 60) / 60) * time.wSecond) + (((360.0f / 60) / 60) / 1000) * time.wMilliseconds;
+    const float fSecondAngle = ((360.0f / 60) * time.wSecond) + (((360.0f / 60) / 1000) * time.wMilliseconds);
+    const float fMillisecondAngle = ((360.0f / 1000) * time.wMilliseconds);
+
+    DrawClockHand(0.6f,  fHourAngle,   6);
+    DrawClockHand(0.85f, fMinuteAngle, 4);
+    DrawClockHand(0.85f, fSecondAngle, 1);
+    DrawClockHand(0.95f, fMillisecondAngle, 0.5);
+
+    m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+}
+void Scene::CalculateLayout() {
+    D2D1_SIZE_F fSize = m_pRenderTarget->GetSize();
+
+    const float x = fSize.width / 2.0f;
+    const float y = fSize.height / 2.0f;
+    const float radius = std::min(x, y);
+
+    m_ellipse = D2D1::Ellipse(D2D1::Point2F(x, y), radius, radius);
+
+    D2D_POINT_2F pt1 = D2D1::Point2F(
+        m_ellipse.point.x,
+        m_ellipse.point.y + (m_ellipse.radiusY * 0.9f)
+        );
+
+    D2D_POINT_2F pt2 = D2D1::Point2F(
+        m_ellipse.point.x,
+        m_ellipse.point.y + (m_ellipse.radiusY - 10)
+        );
+
+    for (DWORD i = 0; i < 12; i++) {
+        D2D1::Matrix3x2F mat = D2D1::Matrix3x2F::Rotation(
+            (360.0f / 12) * i, m_ellipse.point);
+
+        m_Ticks[i*2] = mat.TransformPoint(pt1);
+        m_Ticks[i*2 + 1] = mat.TransformPoint(pt2);
+    }
+}
+void Scene::DiscardDeviceDependentResources() {
+    m_pFill.Release();
+    m_pStroke.Release();
+}
 
 class MainWindow : public BaseWindow<MainWindow> {
     HANDLE m_hTimer;
@@ -73,24 +128,6 @@ public:
     PCWSTR ClassName() const { return L"clock window class"; }
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
 };
-
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow) {
-    MainWindow win;
-    if (!win.Create(L"learning win32 ui", WS_OVERLAPPEDWINDOW)) {
-        return 0;
-    }
-
-    ShowWindow(win.Window(), nCmdShow);
-
-    MSG msg = {};
-    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-
-    return 0;
-}
-
 LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
     HWND hwnd = m_hwnd;
     try {
@@ -102,8 +139,8 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 return 0;
             }
             case WM_SIZE: {
-                int x = (int)(short)LOWORD(lParam);
-                int y = (int)(short)HIWORD(lParam);
+                int x = (short)LOWORD(lParam);
+                int y = (short)HIWORD(lParam);
                 m_scene.Resize(x, y);
                 InvalidateRect(m_hwnd, nullptr, FALSE);
                 return 0;
@@ -115,9 +152,6 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 BeginPaint(m_hwnd, &ps);
                 m_scene.Render(hwnd);
                 EndPaint(m_hwnd, &ps);
-                return 0;
-            }
-            case WM_CLOSE: {
                 return 0;
             }
             case WM_DESTROY: {
@@ -159,4 +193,30 @@ void MainWindow::WaitTimer() {
             == WAIT_OBJECT_0) {
         InvalidateRect(m_hwnd, nullptr, FALSE);
     }
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow) {
+    if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE))) {
+        return 0;
+    }
+
+    MainWindow win;
+    if (!win.Create(L"learning win32 ui", WS_OVERLAPPEDWINDOW)) {
+        return 0;
+    }
+
+    ShowWindow(win.Window(), nCmdShow);
+
+    MSG msg = {};
+    while (msg.message != WM_QUIT) {
+        if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+            continue;
+        }
+        win.WaitTimer();
+    };
+
+    CoUninitialize();
+    return 0;
 }
