@@ -30,6 +30,7 @@ public:
         wc.lpfnWndProc = DERIVED_TYPE::WindowProc;
         wc.hInstance = GetModuleHandle(nullptr);
         wc.lpszClassName = ClassName();
+        wc.style = CS_DBLCLKS;
         RegisterClass(&wc);
 
         m_hwnd = CreateWindowEx(dwExStyle, ClassName(), lpWindowName, dwStyle, x, y, nWidth, nHeight, hWndParent, hMenu, GetModuleHandle(nullptr), this);

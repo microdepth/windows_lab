@@ -69,6 +69,10 @@ public:
 
     void Render(HWND hwnd) {
         HRESULT hr = CreateGraphicsResources(hwnd);
+        if (FAILED(hr))
+        {
+            return;
+        }
 
         assert(m_pRenderTarget);
 

@@ -9,25 +9,50 @@
 #include <assert.h>
 #include "basewin.h"
 #include "scene.h"
+#include <windowsx.h>
 #pragma comment(lib, "d2d1.lib")
 
 const WCHAR WINDOW_NAME[] = L"window name";
+
+class DPIScale {
+    static float scale;
+
+public:
+    static void Initialize(HWND hwnd) {
+        float dpi = GetDpiForWindow(hwnd);
+        scale = dpi / 96.0f;
+    }
+
+    template <typename T>
+    static D2D1_POINT_2F PixelsToDips(T x, T y) {
+        return D2D1::Point2F(static_cast<float>(x) / scale, static_cast<float>(y) / scale);
+    }
+};
+float DPIScale::scale = 1.0f;
 
 class Scene : public GraphicsScene {
     CComPtr<ID2D1SolidColorBrush> m_pFill;
     CComPtr<ID2D1SolidColorBrush> m_pStroke;
 
     D2D1_ELLIPSE m_ellipse;
+    D2D1_ELLIPSE m_ellipse2;
+    D2D1_POINT_2F m_cursor; // todo first thing develop cursor/pointer once reading is done
     D2D_POINT_2F m_Ticks[24];
 
     HRESULT CreateDeviceIndependentResources() { return S_OK; }
-    void    DiscardDeviceIndependentResources() {}
+    void DiscardDeviceIndependentResources() {}
     HRESULT CreateDeviceDependentResources();
-    void    DiscardDeviceDependentResources();
-    void    CalculateLayout();
-    void    RenderScene();
+    void DiscardDeviceDependentResources();
+    void CalculateLayout();
+    void RenderScene();
 
-    void    DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth);
+    void DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth);
+    void DrawCursor();
+
+public:
+    void OnLButtonDown(int x, int y, DWORD flags);
+    void OnLButtonUp();
+    void OnMouseMove(int x, int y, DWORD flags);
 };
 HRESULT Scene::CreateDeviceDependentResources() {
     HRESULT hr = m_pRenderTarget->CreateSolidColorBrush(
@@ -45,6 +70,9 @@ HRESULT Scene::CreateDeviceDependentResources() {
     }
     return hr;
 }
+void Scene::DrawCursor() {
+
+} // todo draw the cursor at all times
 void Scene::DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth) {
     m_pRenderTarget->SetTransform(
         D2D1::Matrix3x2F::Rotation(fAngle, m_ellipse.point)
@@ -81,6 +109,8 @@ void Scene::RenderScene() {
     DrawClockHand(0.85f, fSecondAngle, 1);
     DrawClockHand(0.95f, fMillisecondAngle, 0.5);
 
+    DrawCursor();
+
     m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 }
 void Scene::CalculateLayout() {
@@ -115,6 +145,28 @@ void Scene::DiscardDeviceDependentResources() {
     m_pStroke.Release();
 }
 
+void Scene::OnLButtonDown(int x, int y, DWORD flags) {
+    m_ellipse2.point = m_cursor = DPIScale::PixelsToDips(x, y);
+    m_ellipse2.radiusX = m_ellipse2.radiusY = 1.0f;
+};
+void Scene::OnLButtonUp() {
+
+};
+void Scene::OnMouseMove(int x, int y, DWORD flags) {
+    if (flags & MK_LBUTTON) {
+        const D2D1_POINT_2F dips = DPIScale::PixelsToDips(x, y);
+
+        const float width = (dips.x - m_cursor.x) / 2;
+        const float height = (dips.y - m_cursor.y) / 2;
+        const float centerX = m_cursor.x + width;
+        const float centerY = m_cursor.y + height;
+
+        m_ellipse2.point = D2D1::Point2F(centerX, centerY);
+        m_ellipse2.radiusX = width;
+        m_ellipse2.radiusY = height;
+    }
+};
+
 class MainWindow : public BaseWindow<MainWindow> {
     HANDLE m_hTimer;
     Scene m_scene;
@@ -132,10 +184,27 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
     HWND hwnd = m_hwnd;
     try {
         switch (uMsg) {
+            case WM_LBUTTONDOWN: {
+                SetCapture(m_hwnd);
+                m_scene.OnLButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), (DWORD)wParam);
+                InvalidateRect(m_hwnd, nullptr, FALSE);
+                return 0;
+            }
+            case WM_LBUTTONUP: {
+                m_scene.OnLButtonUp();
+                ReleaseCapture();
+                return 0;
+            }
+            case WM_MOUSEMOVE: {
+                m_scene.OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), (DWORD)wParam);
+                InvalidateRect(m_hwnd, nullptr, FALSE);
+                return 0;
+            }
             case WM_CREATE: {
                 if (FAILED(m_scene.Initialize()) || !InitializeTimer()) {
                     return -1;
                 }
+                DPIScale::Initialize(hwnd);
                 return 0;
             }
             case WM_SIZE: {
@@ -145,8 +214,9 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 InvalidateRect(m_hwnd, nullptr, FALSE);
                 return 0;
             }
-            case WM_PAINT: {}
+            case WM_PAINT: { // todo figure out why this needs to be here and empty
 
+            }
             case WM_DISPLAYCHANGE: {
                 PAINTSTRUCT ps;
                 BeginPaint(m_hwnd, &ps);
@@ -167,7 +237,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 return DefWindowProc(hwnd, uMsg, wParam, lParam);
             }
         }
-    } catch (const std::exception& e) {
+    } catch (const std::exception& e) { // todo find where this was in the tutorial
         MessageBox(m_hwnd, L"exception caught in handle message", L"error", MB_OK | MB_ICONERROR);
         return 0;
     }
