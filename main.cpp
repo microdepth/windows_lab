@@ -33,9 +33,11 @@ float DPIScale::scale = 1.0f;
 class Scene : public GraphicsScene {
     CComPtr<ID2D1SolidColorBrush> m_pFill;
     CComPtr<ID2D1SolidColorBrush> m_pStroke;
+    CComPtr<ID2D1SolidColorBrush> m_pRed;
 
     D2D1_ELLIPSE m_ellipse;
     D2D1_ELLIPSE m_ellipse2;
+    D2D1_ELLIPSE m_ellipse3;
     D2D1_POINT_2F m_cursor; // todo first thing develop cursor/pointer once reading is done
     D2D_POINT_2F m_Ticks[24];
 
@@ -47,11 +49,10 @@ class Scene : public GraphicsScene {
     void RenderScene();
 
     void DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth);
-    void DrawCursor();
 
 public:
     void OnLButtonDown(int x, int y, DWORD flags);
-    void OnLButtonUp();
+    void OnLButtonUp(int x, int y, DWORD flags);
     void OnMouseMove(int x, int y, DWORD flags);
 };
 HRESULT Scene::CreateDeviceDependentResources() {
@@ -68,11 +69,17 @@ HRESULT Scene::CreateDeviceDependentResources() {
             &m_pStroke
             );
     }
+
+    if (SUCCEEDED(hr)) {
+        hr = m_pRenderTarget->CreateSolidColorBrush(
+                D2D1::ColorF(1.0f, 0, 0),
+                D2D1::BrushProperties(),
+                &m_pRed
+                );
+    }
+
     return hr;
 }
-void Scene::DrawCursor() {
-
-} // todo draw the cursor at all times
 void Scene::DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth) {
     m_pRenderTarget->SetTransform(
         D2D1::Matrix3x2F::Rotation(fAngle, m_ellipse.point)
@@ -89,13 +96,19 @@ void Scene::DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth) {
 void Scene::RenderScene() {
     m_pRenderTarget->Clear(D2D1::ColorF(0.2f, 0, 0.2f));
 
+    // draw ellipse
     m_pRenderTarget->FillEllipse(m_ellipse, m_pFill);
     m_pRenderTarget->DrawEllipse(m_ellipse, m_pStroke);
 
+    m_pRenderTarget->FillEllipse(m_ellipse2, m_pRed);
+    m_pRenderTarget->DrawEllipse(m_ellipse2, m_pStroke);
+
+    // draw tick marks
     for (DWORD i = 0; i < 12; i++) {
         m_pRenderTarget->DrawLine(m_Ticks[i*2], m_Ticks[i*2+1], m_pStroke, 2.0f);
     }
 
+    // draw hands
     SYSTEMTIME time;
     GetLocalTime(&time);
 
@@ -109,8 +122,7 @@ void Scene::RenderScene() {
     DrawClockHand(0.85f, fSecondAngle, 1);
     DrawClockHand(0.95f, fMillisecondAngle, 0.5);
 
-    DrawCursor();
-
+    // reset trasform
     m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 }
 void Scene::CalculateLayout() {
@@ -129,7 +141,7 @@ void Scene::CalculateLayout() {
 
     D2D_POINT_2F pt2 = D2D1::Point2F(
         m_ellipse.point.x,
-        m_ellipse.point.y + (m_ellipse.radiusY - 10)
+        m_ellipse.point.y + (m_ellipse.radiusY * 0.96f)
         );
 
     for (DWORD i = 0; i < 12; i++) {
@@ -149,7 +161,7 @@ void Scene::OnLButtonDown(int x, int y, DWORD flags) {
     m_ellipse2.point = m_cursor = DPIScale::PixelsToDips(x, y);
     m_ellipse2.radiusX = m_ellipse2.radiusY = 1.0f;
 };
-void Scene::OnLButtonUp() {
+void Scene::OnLButtonUp(int x, int y, DWORD flags) {
 
 };
 void Scene::OnMouseMove(int x, int y, DWORD flags) {
@@ -191,7 +203,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 return 0;
             }
             case WM_LBUTTONUP: {
-                m_scene.OnLButtonUp();
+                m_scene.OnLButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), (DWORD)wParam);
                 ReleaseCapture();
                 return 0;
             }
