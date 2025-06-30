@@ -31,14 +31,14 @@ public:
 float DPIScale::scale = 1.0f;
 
 class Scene : public GraphicsScene {
-    CComPtr<ID2D1SolidColorBrush> m_pFill;
-    CComPtr<ID2D1SolidColorBrush> m_pStroke;
+    CComPtr<ID2D1SolidColorBrush> m_pGreen;
+    CComPtr<ID2D1SolidColorBrush> m_pBlack;
     CComPtr<ID2D1SolidColorBrush> m_pRed;
 
     D2D1_ELLIPSE m_ellipse;
     D2D1_ELLIPSE m_ellipse2;
     D2D1_ELLIPSE m_ellipse3;
-    D2D1_POINT_2F m_cursor; // todo first thing develop cursor/pointer once reading is done
+    D2D1_POINT_2F m_cursor;
     D2D_POINT_2F m_Ticks[24];
 
     HRESULT CreateDeviceIndependentResources() { return S_OK; }
@@ -57,16 +57,16 @@ public:
 };
 HRESULT Scene::CreateDeviceDependentResources() {
     HRESULT hr = m_pRenderTarget->CreateSolidColorBrush(
-        D2D1::ColorF(0.6f, 1.0f, 0.6f),
+        D2D1::ColorF(0.5f, 1.5f, 0.5f),
         D2D1::BrushProperties(),
-        &m_pFill
+        &m_pGreen
         );
 
     if (SUCCEEDED(hr)) {
         hr = m_pRenderTarget->CreateSolidColorBrush(
             D2D1::ColorF(0, 0, 0),
             D2D1::BrushProperties(),
-            &m_pStroke
+            &m_pBlack
             );
     }
 
@@ -91,21 +91,21 @@ void Scene::DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth) {
         );
 
     m_pRenderTarget->DrawLine(
-        m_ellipse.point, endPoint, m_pStroke, fStrokeWidth);
+        m_ellipse.point, endPoint, m_pBlack, fStrokeWidth);
 }
 void Scene::RenderScene() {
-    m_pRenderTarget->Clear(D2D1::ColorF(0.2f, 0, 0.2f));
+    m_pRenderTarget->Clear(D2D1::ColorF(0, 0, 0));
 
     // draw ellipse
-    m_pRenderTarget->FillEllipse(m_ellipse, m_pFill);
-    m_pRenderTarget->DrawEllipse(m_ellipse, m_pStroke);
+    m_pRenderTarget->FillEllipse(m_ellipse, m_pGreen);
+    m_pRenderTarget->DrawEllipse(m_ellipse, m_pBlack);
 
     m_pRenderTarget->FillEllipse(m_ellipse2, m_pRed);
-    m_pRenderTarget->DrawEllipse(m_ellipse2, m_pStroke);
+    m_pRenderTarget->DrawEllipse(m_ellipse2, m_pBlack);
 
     // draw tick marks
     for (DWORD i = 0; i < 12; i++) {
-        m_pRenderTarget->DrawLine(m_Ticks[i*2], m_Ticks[i*2+1], m_pStroke, 2.0f);
+        m_pRenderTarget->DrawLine(m_Ticks[i*2], m_Ticks[i*2+1], m_pBlack, 2.0f);
     }
 
     // draw hands
@@ -122,7 +122,7 @@ void Scene::RenderScene() {
     DrawClockHand(0.85f, fSecondAngle, 1);
     DrawClockHand(0.95f, fMillisecondAngle, 0.5);
 
-    // reset trasform
+    // reset transform
     m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 }
 void Scene::CalculateLayout() {
@@ -153,8 +153,8 @@ void Scene::CalculateLayout() {
     }
 }
 void Scene::DiscardDeviceDependentResources() {
-    m_pFill.Release();
-    m_pStroke.Release();
+    m_pGreen.Release();
+    m_pBlack.Release();
 }
 
 void Scene::OnLButtonDown(int x, int y, DWORD flags) {
@@ -249,7 +249,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 return DefWindowProc(hwnd, uMsg, wParam, lParam);
             }
         }
-    } catch (const std::exception& e) { // todo find where this was in the tutorial
+    } catch (const std::exception& e) {
         MessageBox(m_hwnd, L"exception caught in handle message", L"error", MB_OK | MB_ICONERROR);
         return 0;
     }
