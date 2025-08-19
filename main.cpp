@@ -257,6 +257,12 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
             case WM_ERASEBKGND: {
                 return 1;
             }
+            case WM_SETCURSOR: {
+                if (LOWORD(lParam) == HTCLIENT) {
+                    SetCursor(LoadCursor(nullptr, IDC_HAND));
+                }
+                return 0;
+            }
             default: {
                 return DefWindowProc(hwnd, uMsg, wParam, lParam);
             }
