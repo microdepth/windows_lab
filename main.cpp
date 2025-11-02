@@ -1,16 +1,21 @@
-#include <iostream>
-
 #define WINVER 0x0A00
 #define _WIN32_WINNT 0x0A00
 #define NOMINMAX
+#include <iostream>
 #include <windows.h>
 #include <winuser.h>
 #include <d2d1.h>
 #include <assert.h>
+#include <vector>
 #include "basewin.h"
 #include "scene.h"
 #include <windowsx.h>
+#include <atlcomcli.h>
+#include <filesystem>
+#include <wincodec.h>
 #pragma comment(lib, "d2d1.lib")
+
+namespace fs = std::filesystem;
 
 const WCHAR WINDOW_NAME[] = L"window name";
 
@@ -47,26 +52,50 @@ class Scene : public GraphicsScene {
     CComPtr<ID2D1SolidColorBrush> m_pBlack;
     CComPtr<ID2D1SolidColorBrush> m_pRed;
 
+    std::vector<D2D1_ELLIPSE> ellipses = {};
+
     D2D1_ELLIPSE m_ellipse;
     D2D1_ELLIPSE m_ellipse2;
     D2D1_ELLIPSE m_ellipse3;
+    D2D1_RECT_F m_rect;
     D2D1_POINT_2F m_cursor;
     D2D_POINT_2F m_Ticks[24];
 
-    HRESULT CreateDeviceIndependentResources() { return S_OK; }
-    void DiscardDeviceIndependentResources() {}
+    CComPtr<IWICFormatConverter> m_pConverter;
+    CComPtr<IWICImagingFactory> m_pWICFactory;
+    std::vector<CComPtr<ID2D1Bitmap>> m_pBitmaps;
+
+    HRESULT CreateDeviceIndependentResources();
+    void DiscardDeviceIndependentResources();
     HRESULT CreateDeviceDependentResources();
     void DiscardDeviceDependentResources();
     void CalculateLayout();
     void RenderScene();
 
     void DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth);
-
 public:
     void OnLButtonDown(int x, int y, DWORD flags);
     void OnLButtonUp(int x, int y, DWORD flags);
     void OnMouseMove(int x, int y, DWORD flags);
 };
+HRESULT Scene::CreateDeviceIndependentResources() {
+    // create the factory
+    HRESULT hr = CoCreateInstance(
+        CLSID_WICImagingFactory,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&m_pWICFactory));
+
+    // create the converter
+    if (SUCCEEDED(hr)) {
+        hr = m_pWICFactory->CreateFormatConverter(&m_pConverter);
+    } else {
+        MessageBox(nullptr, L"GetFrame failed", L"error", MB_OK);
+        return E_FAIL;
+    }
+
+    return hr;
+}
 HRESULT Scene::CreateDeviceDependentResources() {
     HRESULT hr = m_pRenderTarget->CreateSolidColorBrush(
         D2D1::ColorF(0.5f, 1.5f, 0.5f),
@@ -90,20 +119,70 @@ HRESULT Scene::CreateDeviceDependentResources() {
                 );
     }
 
+    CComPtr<IWICBitmapDecoder> decoder;
+    CComPtr<IWICBitmapFrameDecode> frame;
+
+    for (const auto& entry: fs::directory_iterator(fs::current_path())) {
+        if (entry.is_regular_file() && entry.path().filename().extension() == ".png") {
+            if (SUCCEEDED(hr)) {
+                hr = m_pWICFactory->CreateDecoderFromFilename(
+                entry.path().c_str(),
+                nullptr,
+                GENERIC_READ,
+                WICDecodeMetadataCacheOnLoad,
+                &decoder);
+            } else {
+                MessageBox(nullptr, L"CoCreateInstance failed", L"error", MB_OK);
+                return E_FAIL;
+            }
+
+            if (SUCCEEDED(hr)) {
+                hr = decoder->GetFrame(0, &frame);
+            } else {
+                // display a messagebox with the cwd of the program for debugging purposes
+                MessageBox(nullptr, L"CreateDecoderFromFilename failed", L"error", MB_OK);
+
+                WCHAR cwd[MAX_PATH];
+                GetCurrentDirectoryW(MAX_PATH, cwd);
+                MessageBox(nullptr, cwd, L"cwd", MB_OK);
+
+                return E_FAIL;
+            }
+
+            if (SUCCEEDED(hr)) {
+                hr = m_pConverter->Initialize(
+                    frame,
+                    GUID_WICPixelFormat32bppPBGRA,
+                    WICBitmapDitherTypeNone,
+                    nullptr,
+                    0.0,
+                    WICBitmapPaletteTypeCustom);
+            } else {
+                MessageBox(nullptr, L"CreateFormatConverter failed", L"error", MB_OK);
+                return E_FAIL;
+            }
+
+            CComPtr<ID2D1Bitmap> tempBitmap;
+            if (SUCCEEDED(hr)) {
+                hr = m_pRenderTarget->CreateBitmapFromWicBitmap(m_pConverter, nullptr, &tempBitmap);
+            }
+            m_pBitmaps.push_back(tempBitmap);
+        }
+    }
+
     return hr;
 }
 void Scene::DrawClockHand(float fHandLength, float fAngle, float fStrokeWidth) {
     m_pRenderTarget->SetTransform(
         D2D1::Matrix3x2F::Rotation(fAngle, m_ellipse.point)
-            );
+        );
     
     D2D_POINT_2F endPoint = D2D1::Point2F(
         m_ellipse.point.x,
         m_ellipse.point.y - (m_ellipse.radiusY * fHandLength)
         );
 
-    m_pRenderTarget->DrawLine(
-        m_ellipse.point, endPoint, m_pBlack, fStrokeWidth);
+    m_pRenderTarget->DrawLine(m_ellipse.point, endPoint, m_pBlack, fStrokeWidth);
 }
 void Scene::RenderScene() {
     m_pRenderTarget->Clear(D2D1::ColorF(0, 0, 0));
@@ -114,6 +193,11 @@ void Scene::RenderScene() {
 
     m_pRenderTarget->FillEllipse(m_ellipse2, m_pRed);
     m_pRenderTarget->DrawEllipse(m_ellipse2, m_pBlack);
+
+    // for (auto& ellipse : ellipses) {
+    //     m_pRenderTarget->FillEllipse(m_ellipse2, m_pRed);
+    //     m_pRenderTarget->DrawEllipse(m_ellipse2, m_pBlack);
+    // }
 
     // draw tick marks
     for (DWORD i = 0; i < 12; i++) {
@@ -136,6 +220,17 @@ void Scene::RenderScene() {
 
     // reset transform
     m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+
+    for (auto& bitmap: m_pBitmaps) {
+        D2D1_SIZE_F size = bitmap->GetSize();
+
+        m_pRenderTarget->DrawBitmap(
+            bitmap,
+            D2D1::RectF(0, 0, m_pRenderTarget->GetSize().width, m_pRenderTarget->GetSize().height),
+            0.1f, // opacity
+            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR
+        );
+    }
 }
 void Scene::CalculateLayout() {
     D2D1_SIZE_F fSize = m_pRenderTarget->GetSize();
@@ -161,12 +256,20 @@ void Scene::CalculateLayout() {
             (360.0f / 12) * i, m_ellipse.point);
 
         m_Ticks[i*2] = mat.TransformPoint(pt1);
-        m_Ticks[i*2 + 1] = mat.TransformPoint(pt2);
+        m_Ticks[i*2+1] = mat.TransformPoint(pt2);
     }
 }
 void Scene::DiscardDeviceDependentResources() {
     m_pGreen.Release();
     m_pBlack.Release();
+    m_pRed.Release();
+    for (auto& bitmap: m_pBitmaps) {
+        bitmap.Release();
+    }
+    m_pConverter.Release();
+}
+void Scene::DiscardDeviceIndependentResources() {
+    m_pWICFactory.Release();
 }
 
 void Scene::OnLButtonDown(int x, int y, DWORD flags) {
@@ -259,7 +362,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
             }
             case WM_SETCURSOR: {
                 if (LOWORD(lParam) == HTCLIENT) {
-                    SetCursor(LoadCursor(nullptr, IDC_HAND));
+                    SetCursor(LoadCursor(nullptr, IDC_CROSS));
                 }
                 return 0;
             }
@@ -280,7 +383,7 @@ BOOL MainWindow::InitializeTimer() {
 
     LARGE_INTEGER li = {0};
 
-    if (!SetWaitableTimer(m_hTimer, &li, (1000/60), nullptr, nullptr, FALSE)) {
+    if (!SetWaitableTimer(m_hTimer, &li, (1000.0f / 60.0f), nullptr, nullptr, FALSE)) {
         CloseHandle(m_hTimer);
         m_hTimer = nullptr;
         return FALSE;
